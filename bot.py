@@ -1,18 +1,16 @@
 import os
 import random
+import requests
 import telebot
-from google import genai
-from google.genai import types as genai_types
 from telebot import types
 
 # Токен вашего Telegram-бота
 TOKEN = "8449752382:AAHrLDNWaRQkFlkJldiqbzJ3e2cLW7QKt9c"
 
-# Ваш API-ключ от Google AI Studio (Gemini)
-GEMINI_API_KEY = "AQ.Ab8RN6LTHk5DZql5j-7s4mGkMA8c4JYL_C1c_lj66VhvIV8dAw"
+# Ваш ключ Groq
+GROQ_API_KEY = "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"
 
 bot = telebot.TeleBot(TOKEN)
-client = genai.Client(api_key=GEMINI_API_KEY)
 
 ZODIAC_SIGNS = [
     "♈️ Овен",
@@ -41,9 +39,8 @@ def send_welcome(message):
 
   bot.send_message(
       message.chat.id,
-      "🤖☠️ **Нейросетевой гороскоп с жестким сарказмом запущен!**\n\nИскусственный"
-      " интеллект прямо сейчас придумает для тебя едкое предсказание. Выбирай"
-      " свой знак:",
+      "🤖☠️ **Бот с саркастичным гороскопом (через Groq) запущен!**\n\nВыбирай"
+      " свой знак, чтобы узнать всю правду:",
       reply_markup=markup,
       parse_mode="Markdown",
   )
@@ -52,10 +49,8 @@ def send_welcome(message):
 @bot.callback_query_handler(func=lambda call: call.data.startswith("sign_"))
 def callback_inline(call):
   sign = call.data.split("_")[1]
+  bot.answer_callback_query(call.id, "Нейросеть генерирует яд...")
 
-  bot.answer_callback_query(call.id, "ИИ придумывает гадости...")
-
-  # Промпт (запрос) для нейросети
   prompt = (
       f"Напиши короткий, очень саркастичный, едкий и смешной гороскоп на"
       f" сегодня для знака зодиака {sign}. Используй черный юмор, иронию,"
@@ -63,20 +58,32 @@ def callback_inline(call):
       f" сразу текст предсказания (объемом в 2-3 предложения)."
   )
 
+  prediction = ""
   try:
-    # Запрос к Gemini
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
-    )
-    prediction = response.text
-  except Exception as e:
-    prediction = (
-        "Звезды сегодня молчат, потому что ИИ устал от твоих запросов. Попробуй"
-        " позже."
+    # Запрос к Groq API
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    data = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    response = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        json=data,
+        headers=headers,
+        timeout=10,
     )
 
-  # Отправляем результат пользователю
+    if response.status_code == 200:
+      result = response.json()
+      prediction = result["choices"][0]["message"]["content"]
+    else:
+      prediction = "Звезды временно в шоке от твоих запросов. Попробуй позже."
+  except Exception as e:
+    prediction = "Ошибка связи с космосом. Попробуй еще раз."
+
   bot.send_message(
       call.message.chat.id,
       f"🔥 **Гороскоп для {sign}:**\n\n{prediction}\n\n*Хочешь еще порцию"
@@ -85,5 +92,5 @@ def callback_inline(call):
   )
 
 
-print("Бот с ИИ успешно запущен!")
+print("Бот через Groq успешно запущен!")
 bot.polling(none_stop=True)
