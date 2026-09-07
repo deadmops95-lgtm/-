@@ -13,7 +13,6 @@ ADMIN_USERNAME = "Prokudin95"
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# Вспомогательная функция для авто-удаления сообщений через N секунд в группах
 async def safe_delete_message(message: types.Message, delay: int = 15):
     await asyncio.sleep(delay)
     try:
@@ -32,7 +31,7 @@ def init_db():
         username TEXT,
         coins INTEGER DEFAULT 100,
         pokeballs INTEGER DEFAULT 5,
-        potions INTEGER DEFAULT 2,
+        elite_balls INTEGER DEFAULT 1,
         last_bonus TEXT DEFAULT '',
         last_lottery TEXT DEFAULT ''
     )
@@ -103,48 +102,46 @@ async def cmd_start(message: types.Message):
     
     msg = await message.answer(
         f"Привет, {message.from_user.first_name}! Добро пожаловать в мир Покемонов!\n"
-        "Играй прямо в чатах: лови покемонов, качай их, участвуй в рейдах и захватывай стадионы!",
+        "Играй в чатах: лови покемонов (только статичные картинки), устраивай PvP-дуэли с живыми игроками и захватывай стадионы!",
         reply_markup=main_menu_keyboard()
     )
-    # Если бот добавлен в группу, можно автоматически удалять приветствие через время
     if message.chat.type != "private":
         asyncio.create_task(safe_delete_message(msg, 20))
 
-# --- РАСШИРЕННЫЕ АДМИН-КОМАНДЫ ДЛЯ @Prokudin95 ---
+# --- АДМИН-КОМАНДЫ ДЛЯ @Prokudin95 ---
 @dp.message(Command("add_money"))
 async def cmd_add_money(message: types.Message):
     if not is_admin(message.from_user.username):
         return await message.answer("У вас нет прав администратора.")
     args = message.text.split()
     if len(args) < 3:
-        return await message.answer("Использование: /add_money [ID_юзера] [сумма]")
+        return await message.answer("Использование: /add_money [ID] [сумма]")
     target_id, amount = int(args[1]), int(args[2])
     conn = sqlite3.connect("pokemon_bot.db")
     cursor = conn.cursor()
     cursor.execute("UPDATE users SET coins = coins + ? WHERE user_id = ?", (amount, target_id))
     conn.commit()
     conn.close()
-    await message.answer(f"✅ Админ-права: Пользователю {target_id} добавлено {amount} монет.")
+    await message.answer(f"✅ Пользователю {target_id} добавлено {amount} монет.")
 
 @dp.message(Command("add_item"))
 async def cmd_add_item(message: types.Message):
     if not is_admin(message.from_user.username):
         return await message.answer("У вас нет прав администратора.")
-    # /add_item [ID] [pokeballs/potions] [кол-во]
     args = message.text.split()
     if len(args) < 4:
-        return await message.answer("Использование: /add_item [ID] [pokeballs или potions] [количество]")
+        return await message.answer("Использование: /add_item [ID] [pokeballs или elite_balls] [кол-во]")
     target_id, item_type, amount = int(args[1]), args[2], int(args[3])
     
-    if item_type not in ["pokeballs", "potions"]:
-        return await message.answer("Доступные предметы: pokeballs или potions")
+    if item_type not in ["pokeballs", "elite_balls"]:
+        return await message.answer("Доступно: pokeballs или elite_balls")
         
     conn = sqlite3.connect("pokemon_bot.db")
     cursor = conn.cursor()
     cursor.execute(f"UPDATE users SET {item_type} = {item_type} + ? WHERE user_id = ?", (amount, target_id))
     conn.commit()
     conn.close()
-    await message.answer(f"✅ Админ-права: Пользователю {target_id} добавлено {amount} шт. ({item_type}).")
+    await message.answer(f"✅ Пользователю {target_id} выдано {amount} шт. ({item_type}).")
 
 @dp.message(Command("give_all"))
 async def cmd_give_all(message: types.Message):
@@ -152,35 +149,30 @@ async def cmd_give_all(message: types.Message):
         return await message.answer("У вас нет прав администратора.")
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
-        return await message.answer("Использование: /give_all [текст награды]")
+        return await message.answer("Использование: /give_all [текст]")
     conn = sqlite3.connect("pokemon_bot.db")
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET coins = coins + 500, pokeballs = pokeballs + 10, potions = potions + 5")
+    cursor.execute("UPDATE users SET coins = coins + 500, pokeballs = pokeballs + 10, elite_balls = elite_balls + 2")
     conn.commit()
     conn.close()
-    await message.answer(f"📦 Массовая выдача всем игрокам!\nНаграда: {args[1]} (+500 монет, +10 покеболов, +5 зелий)")
+    await message.answer(f"📦 Рассылка для всех выполнена! Награда: {args[1]} (+500 монет, +10 покеболов, +2 элитных мяча)")
 
-# --- БАЗА ПОКЕМОНОВ (СТАТИЧНЫЕ КАРТИНКИ ВМЕСТО ГИФОК) ---
+# --- БАЗА ПОКЕМОНОВ (ТОЛЬКО СТАТИЧНЫЕ КАРТИНКИ) ---
 POKEMON_DATABASE = [
-    # 1 пок
     (1, "Bulbasaur", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/1.png", 2, "Ivysaur", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/2.png"),
     (4, "Charmander", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/4.png", 5, "Charmeleon", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/5.png"),
     (7, "Squirtle", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/7.png", 8, "Wartortle", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/8.png"),
     (25, "Pikachu", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png", 26, "Raichu", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/26.png"),
     (150, "Mewtwo", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/150.png", 0, "", ""),
-    # 2 пок
     (152, "Chikorita", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/152.png", 0, "", ""),
     (155, "Cyndaquil", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/155.png", 0, "", ""),
     (158, "Totodile", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/158.png", 0, "", ""),
-    # 3 пок
     (252, "Treecko", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/252.png", 0, "", ""),
     (255, "Torchic", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/255.png", 0, "", ""),
     (258, "Mudkip", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/258.png", 0, "", ""),
-    # 4 пок
     (387, "Turtwig", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/387.png", 0, "", ""),
     (390, "Chimchar", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/390.png", 0, "", ""),
     (393, "Piplup", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/393.png", 0, "", ""),
-    # 5 пок
     (495, "Snivy", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/495.png", 0, "", ""),
     (498, "Tepig", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/498.png", 0, "", ""),
     (501, "Oshawott", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/501.png", 0, "", "")
@@ -214,10 +206,13 @@ async def explore_map(message: types.Message):
     poke = random.choice(POKEMON_DATABASE)
     poke_id, poke_name, poke_photo = poke[0], poke[1], poke[2]
     
-    kb = [[types.InlineKeyboardButton(text="🎯 Бросить покебол", callback_data=f"catch_{poke_id}")]]
+    kb = [
+        [types.InlineKeyboardButton(text="🎯 Обычный покебол", callback_data=f"catch_normal_{poke_id}")],
+        [types.InlineKeyboardButton(text="💎 Элитный мяч (100%)", callback_data=f"catch_elite_{poke_id}")]
+    ]
     sent_msg = await message.answer_photo(
         photo=poke_photo,
-        caption=f"⚡️ Дикий **{poke_name}** преградил вам путь в чате!",
+        caption=f"⚡️ Дикий **{poke_name}** преградил вам путь!",
         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=kb)
     )
     if message.chat.type != "private":
@@ -225,7 +220,9 @@ async def explore_map(message: types.Message):
 
 @dp.callback_query(F.data.startswith("catch_"))
 async def catch_pokemon(callback: types.CallbackQuery):
-    poke_id = int(callback.data.split("_")[1])
+    data_parts = callback.data.split("_")
+    catch_type = data_parts[1] # normal или elite
+    poke_id = int(data_parts[2])
     user_id = callback.from_user.id
     
     poke_data = next((p for p in POKEMON_DATABASE if p[0] == poke_id), None)
@@ -236,15 +233,25 @@ async def catch_pokemon(callback: types.CallbackQuery):
     
     conn = sqlite3.connect("pokemon_bot.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT pokeballs FROM users WHERE user_id = ?", (user_id,))
-    res = cursor.fetchone()
-    if not res or res[0] <= 0:
-        conn.close()
-        return await callback.answer("❌ У вас нет покеболов! Купите их в магазине.", show_alert=True)
     
-    cursor.execute("UPDATE users SET pokeballs = pokeballs - 1 WHERE user_id = ?", (user_id,))
+    if catch_type == "normal":
+        cursor.execute("SELECT pokeballs FROM users WHERE user_id = ?", (user_id,))
+        res = cursor.fetchone()
+        if not res or res[0] <= 0:
+            conn.close()
+            return await callback.answer("❌ У вас нет обычных покеболов!", show_alert=True)
+        cursor.execute("UPDATE users SET pokeballs = pokeballs - 1 WHERE user_id = ?", (user_id,))
+        success = random.random() < 0.7
+    else: # elite
+        cursor.execute("SELECT elite_balls FROM users WHERE user_id = ?", (user_id,))
+        res = cursor.fetchone()
+        if not res or res[0] <= 0:
+            conn.close()
+            return await callback.answer("❌ У вас нет элитных мячей!", show_alert=True)
+        cursor.execute("UPDATE users SET elite_balls = elite_balls - 1 WHERE user_id = ?", (user_id,))
+        success = True # Элитный мяч ловит со 100% шансом
     
-    if random.random() < 0.7:
+    if success:
         cursor.execute("INSERT INTO user_pokemons (user_id, pokemon_name, pokemon_id, level, hp, max_hp, photo_url) VALUES (?, ?, ?, 1, 100, 100, ?)",
                        (user_id, poke_name, poke_id, poke_photo))
         conn.commit()
@@ -255,7 +262,6 @@ async def catch_pokemon(callback: types.CallbackQuery):
         conn.close()
         await callback.message.edit_caption(caption=f"💨 О нет! **{poke_name}** вырвался и убежал...")
     
-    # Автоудаление сообщения поимки через 20 секунд в чатах
     asyncio.create_task(safe_delete_message(callback.message, 20))
     await callback.answer()
 
@@ -303,7 +309,7 @@ async def level_up_pokemon(callback: types.CallbackQuery):
     conn.close()
     
     await callback.answer(f"Покемон {res[0]} прокачан до {res[1]} уровня!", show_alert=True)
-    await callback.message.edit_text(f"✅ Покемон **{res[0]}** успешно прокачан до **{res[1]}** уровня!")
+    await callback.message.edit_text(f"✅ Покемон **{res[0]}** прокачан до **{res[1]}** уровня!")
     asyncio.create_task(safe_delete_message(callback.message, 15))
 
 @dp.callback_query(F.data.startswith("evolu_"))
@@ -329,79 +335,40 @@ async def evolve_pokemon(callback: types.CallbackQuery):
     conn.commit()
     conn.close()
     
-    sent = await callback.message.answer_photo(
-        photo=new_photo,
-        caption=f"✨ Потрясающе! Ваш покемон успешно эволюционировал в **{new_name}**!"
-    )
+    sent = await callback.message.answer_photo(photo=new_photo, caption=f"✨ Эволюция завершена! Ваш покемон стал **{new_name}**!")
     asyncio.create_task(safe_delete_message(sent, 20))
     await callback.answer()
 
-# --- ИНВЕНТАРЬ И ЗЕЛИЯ ---
+# --- ИНВЕНТАРЬ ---
 @dp.message(F.text == "🎒 Мой инвентарь")
 async def show_inventory(message: types.Message):
     user_id = message.from_user.id
     conn = sqlite3.connect("pokemon_bot.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT coins, pokeballs, potions FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT coins, pokeballs, elite_balls FROM users WHERE user_id = ?", (user_id,))
     user = cursor.fetchone()
     conn.close()
     
     if not user:
         return await message.answer("Сначала введите /start")
     
-    coins, pokeballs, potions = user
-    kb = []
-    if potions > 0:
-        kb.append([types.InlineKeyboardButton(text="🧪 Использовать зелье лечения (+50 HP)", callback_data="use_potion")])
-        
+    coins, pokeballs, elite_balls = user
     msg = await message.answer(
         f"🎒 **Ваш инвентарь:**\n\n"
         f"🪙 Монеты: {coins}\n"
         f"🔴 Покеболы: {pokeballs}\n"
-        f"🧪 Зелья лечения: {potions}",
-        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=kb) if kb else None
+        f"💎 Элитные мячи: {elite_balls}"
     )
     if message.chat.type != "private":
         asyncio.create_task(safe_delete_message(message, 5))
         asyncio.create_task(safe_delete_message(msg, 20))
 
-@dp.callback_query(F.data == "use_potion")
-async def use_potion(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    conn = sqlite3.connect("pokemon_bot.db")
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT potions FROM users WHERE user_id = ?", (user_id,))
-    potions = cursor.fetchone()[0]
-    if potions <= 0:
-        conn.close()
-        return await callback.answer("У вас нет зелий!", show_alert=True)
-        
-    cursor.execute("SELECT id, pokemon_name, hp, max_hp FROM user_pokemons WHERE user_id = ? AND hp < max_hp LIMIT 1", (user_id,))
-    target = cursor.fetchone()
-    
-    if not target:
-        conn.close()
-        return await callback.answer("Все ваши покемоны полностью здоровы!", show_alert=True)
-        
-    p_id, p_name, p_hp, p_max_hp = target
-    new_hp = min(p_max_hp, p_hp + 50)
-    
-    cursor.execute("UPDATE users SET potions = potions - 1 WHERE user_id = ?", (user_id,))
-    cursor.execute("UPDATE user_pokemons SET hp = ? WHERE id = ?", (new_hp, p_id))
-    conn.commit()
-    conn.close()
-    
-    await callback.answer(f"Покемон {p_name} вылечен!", show_alert=True)
-    await callback.message.edit_text(f"🧪 Покемон **{p_name}** восстановил здоровье до {new_hp}/{p_max_hp} HP!")
-    asyncio.create_task(safe_delete_message(callback.message, 15))
-
-# --- МАГАЗИН ---
+# --- МАГАЗИН (БЕЗ ЗЕЛИЙ, С ЭЛИТНЫМИ МЯЧАМИ) ---
 @dp.message(F.text == "🏪 Магазин")
 async def show_shop(message: types.Message):
     kb = [
         [types.InlineKeyboardButton(text="Купить 5 покеболов (50 монет)", callback_data="buy_pokeballs")],
-        [types.InlineKeyboardButton(text="Купить 2 зелья (30 монет)", callback_data="buy_potions")]
+        [types.InlineKeyboardButton(text="Купить 1 элитный мяч (100 монет)", callback_data="buy_elite")]
     ]
     msg = await message.answer("🏪 **Магазин предметов:**\nВыберите товар:", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=kb))
     if message.chat.type != "private":
@@ -423,12 +390,12 @@ async def process_buy(callback: types.CallbackQuery):
             return await callback.answer("❌ Не хватает монет!", show_alert=True)
         cursor.execute("UPDATE users SET coins = coins - 50, pokeballs = pokeballs + 5 WHERE user_id = ?", (user_id,))
         msg = "Куплено 5 покеболов!"
-    elif action == "buy_potions":
-        if coins < 30:
+    elif action == "buy_elite":
+        if coins < 100:
             conn.close()
             return await callback.answer("❌ Не хватает монет!", show_alert=True)
-        cursor.execute("UPDATE users SET coins = coins - 30, potions = potions + 2 WHERE user_id = ?", (user_id,))
-        msg = "Куплено 2 зелья лечения!"
+        cursor.execute("UPDATE users SET coins = coins - 100, elite_balls = elite_balls + 1 WHERE user_id = ?", (user_id,))
+        msg = "Куплен 1 элитный мяч (100% поимка)!"
         
     conn.commit()
     conn.close()
@@ -448,7 +415,7 @@ async def daily_bonus(message: types.Message):
     last_bonus = cursor.fetchone()[0]
     
     if last_bonus == today:
-        msg = await message.answer("🎁 Вы уже получали бонус сегодня! Приходите завтра.")
+        msg = await message.answer("🎁 Вы уже получали бонус сегодня!")
         if message.chat.type != "private":
             asyncio.create_task(safe_delete_message(message, 5))
             asyncio.create_task(safe_delete_message(msg, 10))
@@ -458,7 +425,7 @@ async def daily_bonus(message: types.Message):
     conn.commit()
     conn.close()
     
-    msg = await message.answer("🎉 Ежедневный бонус получен:\n🪙 **+100 монет**\n🔴 **+3 покебола**!")
+    msg = await message.answer("🎉 Бонус получен:\n🪙 **+100 монет**\n🔴 **+3 покебола**!")
     if message.chat.type != "private":
         asyncio.create_task(safe_delete_message(message, 5))
         asyncio.create_task(safe_delete_message(msg, 15))
@@ -475,7 +442,7 @@ async def lottery(message: types.Message):
     last_lottery = cursor.fetchone()[0]
     
     if last_lottery == today:
-        msg = await message.answer("🎰 Вы уже крутили лотерею сегодня! Возвращайтесь завтра.")
+        msg = await message.answer("🎰 Вы уже крутили лотерею сегодня!")
         if message.chat.type != "private":
             asyncio.create_task(safe_delete_message(message, 5))
             asyncio.create_task(safe_delete_message(msg, 10))
@@ -493,7 +460,7 @@ async def lottery(message: types.Message):
         cursor.execute("UPDATE users SET pokeballs = pokeballs + ? WHERE user_id = ?", (prize, user_id))
         text = f"🎰 Удача! Вы выиграли **{prize} покебола**! 🔴"
     else:
-        text = "🎰 Эх, пустой сектор. В следующий раз повезет!"
+        text = "🎰 Пустой сектор. В следующий раз повезет!"
         
     conn.commit()
     conn.close()
@@ -502,45 +469,92 @@ async def lottery(message: types.Message):
         asyncio.create_task(safe_delete_message(message, 5))
         asyncio.create_task(safe_delete_message(msg, 15))
 
-# --- PVP ДУЭЛЬ ---
+# --- НАСТОЯЩИЕ РЕАЛЬНЫЕ PVP-ДУЭЛИ МЕЖДУ ИГРОКАМИ В ЧАТАХ ---
 @dp.message(F.text == "⚔️ PvP Дуэль")
-async def pvp_duel(message: types.Message):
+async def pvp_challenge_menu(message: types.Message):
+    if message.chat.type == "private":
+        msg = await message.answer("⚔️ PvP-дуэли созданы для групповых чатов! Добавьте бота в чат с друзьями, чтобы сражаться друг с другом.")
+        return
+        
     user_id = message.from_user.id
     conn = sqlite3.connect("pokemon_bot.db")
     cursor = conn.cursor()
-    
-    cursor.execute("SELECT pokemon_name, level FROM user_pokemons WHERE user_id = ? ORDER BY level DESC LIMIT 1", (user_id,))
+    cursor.execute("SELECT id, pokemon_name, level FROM user_pokemons WHERE user_id = ? ORDER BY level DESC LIMIT 1", (user_id,))
     my_poke = cursor.fetchone()
-    if not my_poke:
-        msg = await message.answer("У вас нет покемонов для дуэли! Сначала поймайте их на карте.")
-        if message.chat.type != "private":
-            asyncio.create_task(safe_delete_message(message, 5))
-            asyncio.create_task(safe_delete_message(msg, 15))
-        return
-        
-    cursor.execute("SELECT username FROM users WHERE user_id != ? ORDER BY RANDOM() LIMIT 1", (user_id,))
-    rival = cursor.fetchone()
-    rival_name = rival[0] if rival and rival[0] else "Элитный тренер"
     conn.close()
     
-    win = random.choice([True, False])
+    if not my_poke:
+        return await message.answer(f"{message.from_user.first_name}, у вас нет покемонов для дуэли!")
+        
+    kb = [[types.InlineKeyboardButton(text="⚔️ Принять вызов!", callback_data=f"pvp_accept_{user_id}_{my_poke[0]}")]]
+    msg = await message.answer(
+        f"⚔️ Тренер **{message.from_user.first_name}** вызывает любого смельчака на PvP-дуэль!\n"
+        f"Его чемпион: **{my_poke[1]}** (Ур.{my_poke[2]}).\n\n"
+        f"Кто осмелится принять вызов?",
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=kb)
+    )
+
+@dp.callback_query(F.data.startswith("pvp_accept_"))
+async def pvp_accept_duel(callback: types.CallbackQuery):
+    data = callback.data.split("_")
+    challenger_id = int(data[2])
+    challenger_poke_db_id = int(data[3])
+    defender_id = callback.from_user.id
+    
+    if challenger_id == defender_id:
+        return await callback.answer("Нельзя сражаться самому с собой!", show_alert=True)
+        
     conn = sqlite3.connect("pokemon_bot.db")
     cursor = conn.cursor()
     
-    if win:
-        cursor.execute("UPDATE users SET coins = coins + 50 WHERE user_id = ?", (user_id,))
-        result = f"🏆 В дуэли ваш **{my_poke[0]}** победил покемона тренера **@{rival_name}**!\nНаграда: **50 монет** 🪙!"
-    else:
-        result = f"💥 Ваш **{my_poke[0]}** проиграл в упорном бою тренеру **@{rival_name}**."
+    # Проверяем покемона защитника
+    cursor.execute("SELECT id, pokemon_name, level FROM user_pokemons WHERE user_id = ? ORDER BY level DESC LIMIT 1", (defender_id,))
+    defender_poke = cursor.fetchone()
+    if not defender_poke:
+        conn.close()
+        return await callback.answer("У вас нет покемонов для защиты!", show_alert=True)
         
+    # Покемон атакующего
+    cursor.execute("SELECT pokemon_name, level FROM user_pokemons WHERE id = ?", (challenger_poke_db_id,))
+    challenger_poke = cursor.fetchone()
+    if not challenger_poke:
+        conn.close()
+        return await callback.answer("Покемон атакующего больше недоступен.", show_alert=True)
+        
+    # Сравниваем уровни (побеждает тот, у кого выше уровень, при равенстве — рандом)
+    c_lvl = challenger_poke[1]
+    d_lvl = defender_poke[2]
+    
+    if c_lvl > d_lvl:
+        winner_id, winner_name, loser_name = challenger_id, callback.message.reply_to_message.from_user.first_name if callback.message.reply_to_message else "Атакующий", callback.from_user.first_name
+        win_poke, lose_poke = challenger_poke[0], defender_poke[1]
+    elif d_lvl > c_lvl:
+        winner_id, winner_name, loser_name = defender_id, callback.from_user.first_name, "Соперник"
+        win_poke, lose_poke = defender_poke[1], challenger_poke[0]
+    else:
+        if random.random() < 0.5:
+            winner_id, winner_name, loser_name = challenger_id, "Атакующий", callback.from_user.first_name
+            win_poke, lose_poke = challenger_poke[0], defender_poke[1]
+        else:
+            winner_id, winner_name, loser_name = defender_id, callback.from_user.first_name, "Атакующий"
+            win_poke, lose_poke = defender_poke[1], challenger_poke[0]
+            
+    # Передаем победителю 50 монет
+    cursor.execute("UPDATE users SET coins = coins + 50 WHERE user_id = ?", (winner_id,))
     conn.commit()
     conn.close()
-    msg = await message.answer(result)
-    if message.chat.type != "private":
-        asyncio.create_task(safe_delete_message(message, 5))
-        asyncio.create_task(safe_delete_message(msg, 20))
+    
+    result_text = (
+        f"🔥 **ИТОГИ PVP-ДУЭЛИ** 🔥\n\n"
+        f"👑 Победитель: **{winner_name}** ({win_poke})\n"
+        f"💔 Проигравший: **{loser_name}** ({lose_poke})\n\n"
+        f"🏆 Победитель забирает **50 монет** в награду! 🪙"
+    )
+    await callback.message.edit_text(result_text)
+    asyncio.create_task(safe_delete_message(callback.message, 30))
+    await callback.answer()
 
-# --- ИНТЕРЕСНАЯ ФИШКА ДЛЯ ЧАТОВ: РЕЙД НА МИРОВОГО БОССА ---
+# --- РЕЙД НА БОССА ---
 @dp.message(F.text == "🐉 Рейд на Босса")
 async def world_boss_raid(message: types.Message):
     user_id = message.from_user.id
@@ -550,29 +564,26 @@ async def world_boss_raid(message: types.Message):
     my_poke = cursor.fetchone()
     
     if not my_poke:
-        msg = await message.answer("У вас нет покемонов для рейда на босса!")
+        msg = await message.answer("У вас нет покемонов для рейда!")
         if message.chat.type != "private":
             asyncio.create_task(safe_delete_message(message, 5))
             asyncio.create_task(safe_delete_message(msg, 15))
         return
     conn.close()
     
-    # Легендарный босс
     boss_name = "Легендарный Rayquaza"
     boss_photo = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/384.png"
-    
-    # Шанс победить зависит от уровня покемона
-    success_chance = 0.3 + (my_poke[1] * 0.1) # Чем выше уровень, тем выше шанс
+    success_chance = 0.3 + (my_poke[1] * 0.1)
     win = random.random() < min(success_chance, 0.85)
     
     conn = sqlite3.connect("pokemon_bot.db")
     cursor = conn.cursor()
     
     if win:
-        cursor.execute("UPDATE users SET coins = coins + 200, potions = potions + 2 WHERE user_id = ?", (user_id,))
-        caption = f"🔥 ГРАНДИОЗНАЯ ПОБЕДА!\nВаш **{my_poke[0]}** (Ур.{my_poke[1]}) совладал с мощью босса **{boss_name}**!\nНаграда чата: **200 монет и 2 зелья**!"
+        cursor.execute("UPDATE users SET coins = coins + 200, elite_balls = elite_balls + 1 WHERE user_id = ?", (user_id,))
+        caption = f"🔥 ПОБЕДА НАД БОССОМ!\nВаш **{my_poke[0]}** (Ур.{my_poke[1]}) победил **{boss_name}**!\nНаграда: **200 монет и 1 элитный мяч**!"
     else:
-        caption = f"💀 РЕЙД ПРОВАЛЕН...\nБосс **{boss_name}** оказался слишком силен для **{my_poke[0]}** (Ур.{my_poke[1]}). Прокачайте покемона и попробуйте снова!"
+        caption = f"💀 РЕЙД ПРОВАЛЕН...\nБосс **{boss_name}** оказался сильнее покемона **{my_poke[0]}** (Ур.{my_poke[1]})."
         
     conn.commit()
     conn.close()
@@ -645,7 +656,7 @@ async def show_rating(message: types.Message):
     top_users = cursor.fetchall()
     conn.close()
     
-    text = "🏆 **Топ-5 тренеров чата:**\n\n"
+    text = "🏆 **Топ-5 тренеров:**\n\n"
     for idx, (uname, count) in enumerate(top_users, 1):
         name = uname if uname else "Тренер"
         text += f"{idx}. @{name} — {count} покемонов\n"
